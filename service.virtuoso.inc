@@ -437,7 +437,23 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
   
   /*
    * Set a drupal message with the insert/delete queries 
-   * for a given entity type and entity ID
+   * or the response data for a given entity type and entity ID
+   *
+   * @param $entity_type
+   *    The type of entity to test
+   *
+   * @param $id
+   *    The entity ID
+   *
+   * @param $display
+   *    A boolean flag that if TRUE just displays the queries. 
+   *    If FALSE, the queries are executed and the response data 
+   *    is displayed instead
+   *
+   *  @param $toggle
+   *    A string where 'insert' runs just the insert routine,
+   *    'delete' runs just the delete routine, and
+   *    'both' runs both insert and delete routines
    */
   public function testQueries($entity_type, $id, $display = TRUE, $toggle = 'both'){
     $options = $display ? array('display' => $display) : array();
