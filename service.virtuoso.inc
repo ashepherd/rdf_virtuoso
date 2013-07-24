@@ -5,19 +5,34 @@
  */
 class RdfIndexerVirtuosoService extends SearchApiAbstractService {
 
-  private $auth;
-  
   public function __construct(SearchApiServer $server) {
     parent::__construct($server);
     $this->setAuth(NULL);
   }
   
+  // It's unknown if instances of this Service persist 
+  // so the Auth information is may not be available 
+  // for subsequent requests. For now, we include the 
+  // use of variable_set/variable_get to assist until
+  // this can be resolved
+  private $auth;
+  
   public function setAuth($_auth){
     $this->auth = $_auth;
+    variable_set($this->getUniqueName(),$_auth);
   }
   
   public function getAuth(){
-    return $this->auth;
+    return !empty($this->auth) 
+      ? $this->auth 
+      : variable_get($this->getUniqueName(), array());
+  }
+  
+  /*
+   * Generate a unique string based on the machine name of the server
+   */
+  private function getUniqueName(){
+    return 'rdf_virtuoso_'.$this->server->machine_name;
   }
 
   /**
@@ -90,7 +105,7 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
    * option names taken from the configuration form.
    */
   public function viewSettings() {
-  
+    dpm($this->server);  
     $settings = isset($this->server->options) ? $this->server->options : array();
     if( !empty($settings) ){
       require './includes/password.inc';
@@ -211,7 +226,7 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
         $rdf = rdfx_get_rdf_model($index->item_type, $id);
         
         //insert data into Virtuoso 
-        insertItem($rdf);
+        $this->insertItem($rdf);
         
         $ret[] = $id;
       }
@@ -244,7 +259,7 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
       // Emtpy the local store.
       if ($ids === 'all') {
         //clear the entire graph
-        $this->clearGraph($this->server->options['graph']);
+        $this->clearGraph();
       }
       elseif (is_array($ids)) {
         // Contructs the URI of the graph for each entity ID and deletes it.
@@ -253,7 +268,7 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
           $uri = rdfx_resource_uri($index->item_type, $entity);
           
           //delete data from Virtuoso at graph $settings['graph'];
-          deleteItem($uri);
+          $this->ideleteItem($uri);
         }
       }
     }
@@ -273,10 +288,9 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
    *    The rdfx_get_rdf_model object to insert
    * @param $options
    *    Array provided to expansion of the function
-   *    Currently, it supports displaying the insert query via drupal_set_message
+   *    Currently, it supports returning the query string
    */
   protected function insertItem($rdf, array $options = array()){
-  
     $graph =  $this->server->options['graph'];
     $query = 'INSERT DATA INTO GRAPH <'.$graph.'> { ';
     foreach($rdf->index as $subject => $triples){
@@ -299,9 +313,9 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
     $query .= '}';
     
     if( isset($options['display']) ){
-      drupal_set_message($query);
+      return htmlspecialchars($query);
     } else {
-      $this->updateStore($query);
+      return $this->updateStore($query);
     }
   }
   
@@ -312,24 +326,33 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
    *    A uri of a subject in the triplestore to remove
    * @param $options
    *    Array provided to expansion of the function
-   *    Currently, it supports displaying the delete query via drupal_set_message
+   *    Currently, it supports returning the query string
    */
   protected function deleteItem($uri, array $options = array()){
+    $graph =  $this->server->options['graph'];
     $query = 'WITH <'.$graph.'> DELETE { ?s ?p ?o } WHERE { ?s ?p ?o FILTER (?s = <'.$uri.'>)}';
     if( isset($options['display']) ){
-      drupal_set_message($query);
+      return htmlspecialchars($query);
     } else {
-      $this->updateStore($query);
+      return $this->updateStore($query);
     }
   }
   
   /*
    * Clear the triplestore graph
+   *
+   * @param $options
+   *    Array provided to expansion of the function
+   *    Currently, it supports returning the query string
    */
   protected function clearGraph(array $options = array()){
     $graph =  $this->server->options['graph'];
     $query = 'CLEAR GRAPH <'.$graph.'>';
-    $this->updateStore($query);
+    if( isset($options['display']) ){
+      return htmlspecialchars($query);
+    } else {
+      return $this->updateStore($query);
+    }
   }
   
   /*
@@ -341,25 +364,22 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
     $url = $this->getTriplestoreURL() .'?default-graph-uri=&format=text%2Fhtml&timeout=0&debug=on&query='.urlencode($query);
     
     $headers = $this->getAuth();
-    if( !isset($headers) ){
-      $headers = array();
-    }
     $response = drupal_http_request($url, array('headers' => $headers));
     if( $response->code == 401 ){
     
       $uri = parse_url($this->getTriplestoreURL());
       $this->authenticate($response->headers['www-authenticate'], $uri['path']);
       $headers = $this->getAuth();
-      if( !isset($headers) ){
-        $headers = array();
-      }
       $response = drupal_http_request($url,  array('headers' => $headers));
       if( $response->code != 200 ){
         watchdog('rdf_virtuoso', $response->error. '%error (%code) Could not authenticate to the triplestore', array('%error' => $uri['path'], '%code' => $response->code), WATCHDOG_ERROR, $url);
+        return FALSE;
       }
     } elseif($response->code != 200 ) {
       watchdog('rdf_virtuoso', $response->error. '%error (%code) Could not connect to the triplestore', array('%error' => $uri['path'], '%code' => $response->code), WATCHDOG_ERROR, $url);
+      return FALSE;
     }
+    return $response->data;
   }
   
   /*
@@ -424,10 +444,10 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
     $rdf= rdfx_get_rdf_model($entity_type, $id);
     
     if( $toggle == 'both' || $toggle == 'insert'){
-      $this->insertItem($rdf, $options);
+      drupal_set_message($this->insertItem($rdf, $options));
     }
     if( $toggle == 'both' || $toggle == 'delete'){
-      $this->deleteItem($rdf, $options);
+      drupal_set_message($this->deleteItem($rdf->uri, $options));
     }
   }
 }
