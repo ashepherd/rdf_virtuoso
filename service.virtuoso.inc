@@ -105,7 +105,6 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
    * option names taken from the configuration form.
    */
   public function viewSettings() {
-    dpm($this->server);  
     $settings = isset($this->server->options) ? $this->server->options : array();
     if( !empty($settings) ){
       require './includes/password.inc';
