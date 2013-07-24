@@ -267,7 +267,7 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
           $uri = rdfx_resource_uri($index->item_type, $entity);
           
           //delete data from Virtuoso at graph $settings['graph'];
-          $this->ideleteItem($uri);
+          $this->deleteItem($uri);
         }
       }
     }
