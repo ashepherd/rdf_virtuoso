@@ -115,7 +115,7 @@ class RdfIndexerVirtuosoService extends SearchApiAbstractService {
       $output .= "</dd>\n  <dt>";
       $output .= t('Graph URI');
       $output .= "</dt>\n<dd>";
-      $output .= l($settings['graph'], $settings['graph']);
+      $output .= $settings['graph'];
       $output .= "</dd>\n  <dt>";
       $output .= t('Username');
       $output .= "</dt>\n  <dd>";
